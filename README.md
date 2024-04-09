@@ -1,11 +1,13 @@
 # Automatic cost control by capping Google Cloud billing
-<br>
+
 This repo is forked from: 
 [Cyclenerd poweroff-google-cloud-cap-billing.git](https://github.com/Cyclenerd/poweroff-google-cloud-cap-billing.git)
+
 The only differenece is that the original repo assumed one project linked to one billing account.
 But in case there are many project linked to one billing account there could be issue as only one project would be unlinked.
 This solves the issue by providing a list of linked project to the terraform variable project_ids
-<br>
+
+
 [![Badge: Google Cloud](https://img.shields.io/badge/Google%20Cloud-%234285F4.svg?logo=google-cloud&logoColor=white)](#readme)
 [![Badge: Terraform](https://img.shields.io/badge/Terraform-%235835CC.svg?logo=terraform&logoColor=white)](#readme)
 [![Badge: CI](https://github.com/Cyclenerd/poweroff-google-cloud-cap-billing/actions/workflows/ci.yml/badge.svg)](https://github.com/Cyclenerd/poweroff-google-cloud-cap-billing/actions/workflows/ci.yml)

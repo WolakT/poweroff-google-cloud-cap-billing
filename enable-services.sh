@@ -53,6 +53,8 @@ MY_GCP_SERVICES=(
     "cloudbuild.googleapis.com"
     # Cloud Function API
     "cloudfunctions.googleapis.com"
+    # Artifact Registry API
+    "artifactregistry.googleapis.com"
 )
 
 # Enable API

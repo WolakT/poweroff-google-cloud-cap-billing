@@ -35,12 +35,16 @@ data "google_project" "my-project" {
   project_id = var.project_id
 }
 
+data "google_billing_account" "test-billing-account" {
+  display_name = var.billing_name
+  depends_on   = [data.google_project.my-project]
+}
 # Billing account
 # https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/billing_account
-data "google_billing_account" "my-billing-account" {
-  billing_account = data.google_project.my-project.billing_account
-  depends_on      = [data.google_project.my-project]
-}
+#data "google_billing_account" "test-billing-account" {
+#  billing_account = data.google_project.my-project.billing_account
+#  depends_on      = [data.google_project.my-project]
+#}
 
 ###############################################################################
 # SERVICE ACCOUNT for Cloud Function to cap the billing account
@@ -68,7 +72,8 @@ resource "null_resource" "wait-for-sa" {
 # https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/google_project_iam_custom_role
 # https://cloud.google.com/billing/docs/how-to/modify-project#disable_billing_for_a_project
 resource "google_project_iam_custom_role" "my-cap-billing-role" {
-  project = var.project_id
+  for_each = toset(var.project_ids)
+  project  = each.value
   # Camel case role id to use for this role. Cannot contain - character.
   role_id     = "myCapBilling"
   title       = "Cap Billing Custom Role"
@@ -82,10 +87,25 @@ resource "google_project_iam_custom_role" "my-cap-billing-role" {
 # Updates the IAM policy to grant a role to service account. Other members for the role for the project are preserved.
 # https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/google_project_iam
 resource "google_project_iam_member" "my-cap-billing-role-binding" {
-  project    = var.project_id
-  role       = google_project_iam_custom_role.my-cap-billing-role.name #roles/billing.projectManager
+  for_each   = toset(var.project_ids)
+  project    = each.value
+  role       = google_project_iam_custom_role.my-cap-billing-role[each.value].id #roles/billing.projectManager
   member     = "serviceAccount:${google_service_account.my-cap-billing-service-account.email}"
   depends_on = [google_project_iam_custom_role.my-cap-billing-role, null_resource.wait-for-sa]
+}
+#Gives additional role to the service account to be able to list projects per billing account
+#resource "google_project_iam_member" "my-cap-billing-viewer-role-binding" {
+#  project    = var.project_id
+#  role       = "roles/billing.viewer"
+#  member     = "serviceAccount:${google_service_account.my-cap-billing-service-account.email}"
+#  # This resource depends on the service account creation but not necessarily on the custom role creation
+#  depends_on = [null_resource.wait-for-sa]
+#}
+#
+resource "google_billing_account_iam_member" "billing_viewer" {
+  billing_account_id = data.google_billing_account.test-billing-account.id
+  role               = "roles/billing.viewer"
+  member             = "serviceAccount:${google_service_account.my-cap-billing-service-account.email}"
 }
 
 ###############################################################################
@@ -121,7 +141,7 @@ resource "google_pubsub_subscription" "my-cap-billing-pubsub-pull" {
 # Create budget alert
 # https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/billing_budget
 resource "google_billing_budget" "my-cap-billing-budget" {
-  billing_account = data.google_billing_account.my-billing-account.id
+  billing_account = data.google_billing_account.test-billing-account.id
   display_name    = "Unlink ${var.project_id} from billing account"
 
   amount {
@@ -136,7 +156,8 @@ resource "google_billing_budget" "my-cap-billing-budget" {
   }
 
   budget_filter {
-    projects               = ["projects/${data.google_project.my-project.number}"]
+    #if projects variable is omitted then all costs are considered
+    #projects               = ["projects/${data.google_project.my-project.number}"]
     credit_types_treatment = "INCLUDE_ALL_CREDITS"
   }
 

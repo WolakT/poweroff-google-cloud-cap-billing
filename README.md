@@ -1,5 +1,11 @@
 # Automatic cost control by capping Google Cloud billing
-
+<br>
+This repo is forked from: 
+[Cyclenerd poweroff-google-cloud-cap-billing.git](https://github.com/Cyclenerd/poweroff-google-cloud-cap-billing.git)
+The only differenece is that the original repo assumed one project linked to one billing account.
+But in case there are many project linked to one billing account there could be issue as only one project would be unlinked.
+This solves the issue by providing a list of linked project to the terraform variable project_ids
+<br>
 [![Badge: Google Cloud](https://img.shields.io/badge/Google%20Cloud-%234285F4.svg?logo=google-cloud&logoColor=white)](#readme)
 [![Badge: Terraform](https://img.shields.io/badge/Terraform-%235835CC.svg?logo=terraform&logoColor=white)](#readme)
 [![Badge: CI](https://github.com/Cyclenerd/poweroff-google-cloud-cap-billing/actions/workflows/ci.yml/badge.svg)](https://github.com/Cyclenerd/poweroff-google-cloud-cap-billing/actions/workflows/ci.yml)
@@ -74,6 +80,7 @@ Now you can create a budget alert and Cloud Function for this project:
 terraform apply \
   -var="project_id=$GOOGLE_CLOUD_PROJECT" \
   -var="target_amount=1000"
+  -var="project_ids=[list of projects linked to billing account]
 ```
 
 In detail the following is added to the project:
@@ -93,6 +100,7 @@ You can customize the setup with the following Terraform input variables:
 | Variable        | Description                                                        | Default           |
 |-----------------|--------------------------------------------------------------------|-------------------|
 | `project_id`    | The project ID for the resources and budget alert                  |                   |
+| `project_ids`   | List of project names which are linked to the billing account      |                   |
 | `pubsub_topic`  | Name of the Pub/Sub topic                                          | cap-billing-alert |
 | `target_amount` | Set maximum monthly budget amount (currency as in billing account) | 1000              |
 | `region`        | Region for the resources                                           | us-central1       |
@@ -162,18 +170,6 @@ To run the commands described in this repo, you need the following:
 1. Install [Terraform](https://www.terraform.io/downloads.html) version 1.1.9 or later.
 1. Set up a Google Cloud
    [billing account](https://cloud.google.com/billing/docs/how-to/manage-billing-account) and project.
-
-## ❤️ Contributing
-
-Have a patch that will benefit this project?
-Awesome! Follow these steps to have it accepted.
-
-1. Please read [how to contribute](CONTRIBUTING.md).
-1. Fork this Git repository and make your changes.
-1. Create a Pull Request.
-1. Incorporate review feedback to your changes.
-1. Accepted!
-
 
 ## 📜 License
 

@@ -24,11 +24,23 @@
 
 import base64
 import json
+import os
+
 import google.auth
 from google.cloud import billing
 
 PROJECT_ID = google.auth.default()[1]
 cloud_billing_client = billing.CloudBillingClient()
+
+
+def list_projects(billing_account_name: str):
+    """lists projects linked to a given billing account id
+    billing_account_id: str in form of "billingAccounts/{billing_account_id}"""
+
+    projects = cloud_billing_client.list_project_billing_info(name=billing_account_name)
+    project_names = [project.project_id for project in projects]
+    print(f"These are relevant project names: {project_names}")
+    return project_names
 
 
 def stop_billing(data: dict, context):
@@ -42,8 +54,16 @@ def stop_billing(data: dict, context):
     if cost_amount <= budget_amount:
         print(f"No action necessary. (Current cost: {cost_amount})")
         return
+    budget_id = os.environ.get("MY_BUDGET_ALERT_ID")
+    billing_account_id = budget_id.split("/")[1]
+    billing_account_name = f"billingAccounts/{billing_account_id}"
+    projects = list_projects(billing_account_name)
+    for project in projects:
+        project_name = cloud_billing_client.common_project_path(project)
+        unlink_billing(project_name)
 
-    project_name = cloud_billing_client.common_project_path(PROJECT_ID)
+
+def unlink_billing(project_name: str):
     request = billing.UpdateProjectBillingInfoRequest(
         name=project_name,
         project_billing_info=billing.ProjectBillingInfo(

@@ -35,9 +35,6 @@ variable "billing_name" {
   default = "My Billing Account"
 }
 
-variable "project_ids" {
-  type    = list(string)
-}
 
 variable "pubsub_topic" {
   type        = string

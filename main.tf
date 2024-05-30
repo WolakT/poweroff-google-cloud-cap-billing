@@ -47,6 +47,19 @@ data "google_billing_account" "test-billing-account" {
 #}
 
 ###############################################################################
+# GET PROJECT IDS FROM SCRIP
+###############################################################################
+
+data "external" "project_ids" {
+  program = ["python3", "list_projects.py"]
+}
+
+locals {
+  project_ids = jsondecode(data.external.project_ids.result["project_ids"])
+}
+
+
+###############################################################################
 # SERVICE ACCOUNT for Cloud Function to cap the billing account
 ###############################################################################
 
@@ -72,7 +85,7 @@ resource "null_resource" "wait-for-sa" {
 # https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/google_project_iam_custom_role
 # https://cloud.google.com/billing/docs/how-to/modify-project#disable_billing_for_a_project
 resource "google_project_iam_custom_role" "my-cap-billing-role" {
-  for_each = toset(var.project_ids)
+  for_each = toset(local.project_ids)
   project  = each.value
   # Camel case role id to use for this role. Cannot contain - character.
   role_id     = "myCapBilling"
@@ -87,13 +100,12 @@ resource "google_project_iam_custom_role" "my-cap-billing-role" {
 # Updates the IAM policy to grant a role to service account. Other members for the role for the project are preserved.
 # https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/google_project_iam
 resource "google_project_iam_member" "my-cap-billing-role-binding" {
-  for_each   = toset(var.project_ids)
+  for_each   = toset(local.project_ids)
   project    = each.value
   role       = google_project_iam_custom_role.my-cap-billing-role[each.value].id #roles/billing.projectManager
   member     = "serviceAccount:${google_service_account.my-cap-billing-service-account.email}"
   depends_on = [google_project_iam_custom_role.my-cap-billing-role, null_resource.wait-for-sa]
 }
-#Gives additional role to the service account to be able to list projects per billing account
 #resource "google_project_iam_member" "my-cap-billing-viewer-role-binding" {
 #  project    = var.project_id
 #  role       = "roles/billing.viewer"
@@ -102,6 +114,7 @@ resource "google_project_iam_member" "my-cap-billing-role-binding" {
 #  depends_on = [null_resource.wait-for-sa]
 #}
 #
+#Gives additional role to the service account to be able to list projects per billing account
 resource "google_billing_account_iam_member" "billing_viewer" {
   billing_account_id = data.google_billing_account.test-billing-account.id
   role               = "roles/billing.viewer"
@@ -273,4 +286,9 @@ resource "google_cloudfunctions_function" "my-cap-billing-function" {
     google_pubsub_topic.my-cap-billing-pubsub,
     null_resource.wait-for-archive
   ]
+}
+
+output "project_ids" {
+  value = local.project_ids
+  #value = var.project_ids
 }

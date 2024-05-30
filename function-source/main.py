@@ -39,7 +39,6 @@ def list_projects(billing_account_name: str):
 
     projects = cloud_billing_client.list_project_billing_info(name=billing_account_name)
     project_names = [project.project_id for project in projects]
-    print(f"These are relevant project names: {project_names}")
     return project_names
 
 

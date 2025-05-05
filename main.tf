@@ -145,6 +145,7 @@ resource "google_pubsub_subscription" "my-cap-billing-pubsub-pull" {
   name       = "${var.pubsub_topic}-pull"
   topic      = google_pubsub_topic.my-cap-billing-pubsub.name
   depends_on = [google_pubsub_topic.my-cap-billing-pubsub]
+  filter = "attributes:forecastThresholdExceeded"
 }
 
 ###############################################################################

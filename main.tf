@@ -72,13 +72,19 @@ resource "google_service_account" "my-cap-billing-service-account" {
   description  = "Service Account to unlink project from billing account"
 }
 
+resource "google_service_account" "my-cap-billing-push-service-account" {
+  project      = var.project_id
+  account_id   = "sa-cap-billing-push"
+  display_name = "Cap Billing Push"
+  description  = "Service Account for the push subscription"
+}
 # Sleep and wait for service account
 # https://github.com/hashicorp/terraform/issues/17726#issuecomment-377357866
 resource "null_resource" "wait-for-sa" {
   provisioner "local-exec" {
     command = "sleep 30"
   }
-  depends_on = [google_service_account.my-cap-billing-service-account]
+  depends_on = [google_service_account.my-cap-billing-service-account, google_service_account.my-cap-billing-push-service-account]
 }
 
 # Create custom role
@@ -121,6 +127,20 @@ resource "google_billing_account_iam_member" "billing_viewer" {
   member             = "serviceAccount:${google_service_account.my-cap-billing-service-account.email}"
 }
 
+# Give proper role for the push subscription SA
+resource "google_cloudfunctions_function_iam_member" "allow-push-sa-invoke" {
+  project        = var.project_id
+  region         = var.region
+  cloud_function = google_cloudfunctions_function.my-cap-billing-function.name
+
+  role   = "roles/cloudfunctions.invoker"
+  member = "serviceAccount:${google_service_account.my-cap-billing-push-service-account.email}"
+
+  depends_on = [
+    google_cloudfunctions_function.my-cap-billing-function,
+    google_service_account.my-cap-billing-push-service-account
+  ]
+}
 ###############################################################################
 # PUB/SUB TOPIC for BUDGET ALERT
 ###############################################################################
@@ -137,6 +157,12 @@ resource "google_pubsub_topic" "my-cap-billing-pubsub" {
     "terraform" = "true"
   }
 }
+# Topic for Dead Letter Queue
+resource "google_pubsub_topic" "my-dlq-topic" {
+  name                       = "${var.pubsub_topic}-dlq"
+  project                    = var.project_id
+  message_retention_duration = "604800s" # 7 days
+}
 
 # Create Pub/Sub subscription to have the possibility to read (pull) the messages via the console (dashboard)
 # https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/pubsub_subscription
@@ -145,7 +171,36 @@ resource "google_pubsub_subscription" "my-cap-billing-pubsub-pull" {
   name       = "${var.pubsub_topic}-pull"
   topic      = google_pubsub_topic.my-cap-billing-pubsub.name
   depends_on = [google_pubsub_topic.my-cap-billing-pubsub]
+  filter     = "attributes:forecastThresholdExceeded"
+}
+# Create Pub/Sub subscription to push messages to the cloud function
+resource "google_pubsub_subscription" "my-cap-billing-pubsub-push" {
+  name    = "${var.pubsub_topic}-push"
+  topic   = google_pubsub_topic.my-cap-billing-pubsub.name
+  project = var.project_id
+
+  push_config {
+    push_endpoint = google_cloudfunctions_function.my-cap-billing-function.https_trigger_url
+    oidc_token {
+      service_account_email = google_service_account.my-cap-billing-push-service-account.email
+    }
+  }
+  dead_letter_policy {
+    dead_letter_topic     = google_pubsub_topic.my-dlq-topic.id
+    max_delivery_attempts = 5 # Customize as needed
+  }
+
+  retry_policy {
+    minimum_backoff = "10s"
+    maximum_backoff = "600s"
+  }
+  expiration_policy {
+    ttl = "" # 🔒 Prevents automatic expiration
+  }
+
   filter = "attributes:forecastThresholdExceeded"
+
+  depends_on = [google_cloudfunctions_function.my-cap-billing-function, google_service_account.my-cap-billing-push-service-account]
 }
 
 ###############################################################################
@@ -258,33 +313,30 @@ resource "google_cloudfunctions_function" "my-cap-billing-function" {
   description = "Function to unlink project from billing account"
   project     = var.project_id
   region      = var.region
-  # Runtime ID
-  # https://cloud.google.com/functions/docs/concepts/exec#runtimes
-  runtime = "python39"
-  # Service account to run the function with
-  service_account_email = google_service_account.my-cap-billing-service-account.email
-  available_memory_mb   = 128
+  runtime     = "python39"
+  entry_point = "stop_billing"
+
   source_archive_bucket = google_storage_bucket.my-cap-billing-bucket.name
   source_archive_object = google_storage_bucket_object.my-cap-billing-archive.name
-  entry_point           = "stop_billing"
+
+  service_account_email = google_service_account.my-cap-billing-service-account.email
+  available_memory_mb   = 128
   timeout               = 120
   min_instances         = 0
   max_instances         = 1
-  event_trigger {
-    event_type = "google.pubsub.topic.publish"
-    resource   = google_pubsub_topic.my-cap-billing-pubsub.name
-    failure_policy {
-      retry = false
-    }
-  }
+
+  trigger_http = true
+
   labels = {
     terraform = "true"
   }
+
   environment_variables = {
-    MY_BUDGET_ALERT_ID = "${google_billing_budget.my-cap-billing-budget.id}"
+    MY_BUDGET_ALERT_ID = google_billing_budget.my-cap-billing-budget.id
   }
+
   depends_on = [
-    google_pubsub_topic.my-cap-billing-pubsub,
+    google_storage_bucket_object.my-cap-billing-archive,
     null_resource.wait-for-archive
   ]
 }

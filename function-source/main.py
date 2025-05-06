@@ -25,6 +25,7 @@ def stop_billing(request):
 
         pubsub_message = envelope.get("message", {})
         encoded_data = pubsub_message.get("data")
+        print(f"This is Pub/Sub message: {pubsub_message}")
 
         if not encoded_data:
             print(f"Missing 'data' in Pub/Sub message: {pubsub_message}")
@@ -35,7 +36,6 @@ def stop_billing(request):
         except Exception as decode_err:
             print(f"Failed to decode message data: {decode_err}")
             return "Bad Request: Cannot decode data", 400
-            pubsub_data = base64.b64decode(pubsub_message["data"]).decode("utf-8")
         print(f"Decoded Pub/Sub data: {pubsub_data}")
 
         pubsub_json = json.loads(pubsub_data)
@@ -59,7 +59,7 @@ def stop_billing(request):
 
     except Exception as e:
         print(f"Error: {e}")
-        return f"Internal Server Error: {e}", 500
+        return f"Internal Server Error: {e}", 200
 
 
 def unlink_billing(project_name: str):

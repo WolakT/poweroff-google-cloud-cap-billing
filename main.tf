@@ -141,6 +141,21 @@ resource "google_cloudfunctions_function_iam_member" "allow-push-sa-invoke" {
     google_service_account.my-cap-billing-push-service-account
   ]
 }
+
+# Role for the project pubsub service account to use the DLQ
+
+resource "google_pubsub_topic_iam_member" "dlq_publisher" {
+  topic  = google_pubsub_topic.my-dlq-topic.name
+  role   = "roles/pubsub.publisher"
+  member = "serviceAccount:service-${data.google_project.my-project.number}@gcp-sa-pubsub.iam.gserviceaccount.com"
+}
+
+# Grant SUBSCRIBER on original push subscription
+resource "google_pubsub_subscription_iam_member" "dlq_subscriber" {
+  subscription = google_pubsub_subscription.my-cap-billing-pubsub-push.name
+  role         = "roles/pubsub.subscriber"
+  member       = "serviceAccount:service-${data.google_project.my-project.number}@gcp-sa-pubsub.iam.gserviceaccount.com"
+}
 ###############################################################################
 # PUB/SUB TOPIC for BUDGET ALERT
 ###############################################################################
